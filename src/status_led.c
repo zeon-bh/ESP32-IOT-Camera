@@ -1,10 +1,13 @@
 # include <status_led.h>
 
+static esp_err_t Init_IS_LED_Timer(void);
+static esp_err_t Init_IS_LED_Channel(void);
+
 // IS LED logging TAG
 static const char* TAG = "IS_LED";
 
 // Initialize the LEDC Timer using the REF_CLK [1 Mhz]
-void Init_IS_LED_Timer(void){
+static esp_err_t Init_IS_LED_Timer(void){
     ledc_timer_config_t led_blink = {
         .duty_resolution = LEDC_TIMER_15_BIT,
         .clk_cfg = LEDC_USE_REF_TICK,
@@ -12,17 +15,12 @@ void Init_IS_LED_Timer(void){
         .speed_mode = LEDC_HIGH_SPEED_MODE,
         .timer_num = IS_LED_TIMER
     };
-    esp_err_t ret = ledc_timer_config(&led_blink);
-
-    if(ret != ESP_OK){
-        ESP_LOGE(TAG,"LEDC Timer initialization failed!!! | Timer No. = %d",IS_LED_TIMER);
-        ESP_ERROR_CHECK(ret);
-    }
+    return ledc_timer_config(&led_blink);
 }
 
 
 // Initialize the LEDC Channel with HIGH_SPEED_MODE
-void Init_IS_LED_Channel(void){
+static esp_err_t Init_IS_LED_Channel(void){
     ledc_channel_config_t led_blink_chan = {
         .gpio_num = IS_LED,
         .speed_mode = LEDC_HIGH_SPEED_MODE,
@@ -31,11 +29,25 @@ void Init_IS_LED_Channel(void){
         .timer_sel = IS_LED_TIMER,
         .duty = 16383,
     };
-    esp_err_t ret = ledc_channel_config(&led_blink_chan);
+    return ledc_channel_config(&led_blink_chan);
+}
 
+// Initialize the status LED Module
+void Init_IS_LED(){
+    esp_err_t ret = ESP_OK;
+
+    ret = Init_IS_LED_Timer();
+    if(ret != ESP_OK){
+        ESP_LOGE(TAG,"LEDC Timer initialization failed!!! | Timer No. = %d",IS_LED_TIMER);
+        ESP_ERROR_CHECK(ret);
+        return;
+    }
+
+    ret = Init_IS_LED_Channel();
     if(ret != ESP_OK){
         ESP_LOGE(TAG,"LEDC Channel initialization failed!!! | Channel No. = %d",IS_LED_CHAN);
         ESP_ERROR_CHECK(ret);
+        return;
     }
 }
 
