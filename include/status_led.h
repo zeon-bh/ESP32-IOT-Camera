@@ -27,9 +27,8 @@ typedef enum {
 } IS_LED_Mode;
 
 
-// Initialize the timer and channel of the LEDC module
-void Init_IS_LED_Timer(void);
-void Init_IS_LED_Channel(void);
+// Initialize Status LED Module
+void Init_IS_LED(void);
 
 // IS LED modes
 void IS_LED_Set_Mode(IS_LED_Mode);
