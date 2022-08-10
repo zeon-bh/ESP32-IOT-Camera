@@ -10,7 +10,7 @@
 #define CAM_D0	GPIO_NUM_5
 #define CAM_D1	GPIO_NUM_18
 #define CAM_D2	GPIO_NUM_19
-#define CAM_D3	GPIO_NUM_26
+#define CAM_D3	GPIO_NUM_21
 #define CAM_D4	GPIO_NUM_36
 #define CAM_D5	GPIO_NUM_39
 #define CAM_D6	GPIO_NUM_34

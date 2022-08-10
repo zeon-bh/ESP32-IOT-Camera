@@ -57,10 +57,9 @@ void task_socket(void* args){
             size_t* bf_size = &(fb->len);
             // Send buffer size
             int err = send(sock, bf_size, sizeof(size_t), 0);
+            ESP_LOGI(TAG,"Camera Buffer Size = %d",fb->len);
             // Send the buffer data
             err = send(sock, fb->buf, fb->len, 0);
-            bool isJPG = frame2jpg(fb,80,fb->buf,fb->len);
-            if (!isJPG) ESP_LOGE(TAG,"Camera Frame buffer not converted to JPG");
 
             if (err < 0) {
                 ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
