@@ -38,8 +38,7 @@ typedef struct {
 } US_detect_range_t;
 
 // Init Functions
-void HC_Trig_Init(void);
+esp_err_t HC_Trig_Init(void);
 RingbufHandle_t HC_Echo_Init(void);
 
-void HC_Trigger_Pulse(void);
 float HC_Get_Range(RingbufHandle_t Echo_buffer);

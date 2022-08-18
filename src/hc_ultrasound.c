@@ -1,10 +1,25 @@
 #include <hc_ultrasound.h>
 
+static void HC_Trigger_Pulse(void);
+
 // ESP Logging TAG
 static const char* TAG = "HC_Ultrasound";
 
+// Generate a 10us Pulse to trigger the HC-SR04 Sensor
+static void HC_Trigger_Pulse(){
+    rmt_item32_t hc_trig = {
+        .level0 = 1,
+        .duration0 = RMT_TICK_10_us,
+        .level1 = 0,
+        .duration1 = RMT_TICK_10_us
+    };
+
+    ESP_ERROR_CHECK(rmt_write_items(HC_TRIG_CHANNEL,&hc_trig,1,true));
+    ESP_ERROR_CHECK(rmt_wait_tx_done(HC_TRIG_CHANNEL,portMAX_DELAY));
+}
+
 // Initializes the RMT Tx module
-void HC_Trig_Init(){
+esp_err_t HC_Trig_Init(){
     esp_err_t ret;
     rmt_config_t hc_trig_conf = {
         .rmt_mode = RMT_MODE_TX,
@@ -33,6 +48,8 @@ void HC_Trig_Init(){
         ESP_LOGE(TAG,"HC Trigger driver installation failed !!! check error details....");
         ESP_ERROR_CHECK(ret);
     }
+
+    return ret;
 }
 
 // Initializes the RMT Rx module and returns an handle to a ring-buffer which stores the recieved signal data
@@ -73,19 +90,6 @@ RingbufHandle_t HC_Echo_Init(){
     return Echo_buffer;
 }
 
-// Generate a 10us Pulse to trigger the HC-SR04 Sensor
-void HC_Trigger_Pulse(){
-    rmt_item32_t hc_trig = {
-        .level0 = 1,
-        .duration0 = RMT_TICK_10_us,
-        .level1 = 0,
-        .duration1 = RMT_TICK_10_us
-    };
-
-    ESP_ERROR_CHECK(rmt_write_items(HC_TRIG_CHANNEL,&hc_trig,1,true));
-    ESP_ERROR_CHECK(rmt_wait_tx_done(HC_TRIG_CHANNEL,portMAX_DELAY));
-}
-
 // Read from RMT Rx Buffer and calculate the range measured by the sensor
 // Returns -1.0 if no data is read from the buffer after timeout
 float HC_Get_Range(RingbufHandle_t Echo_buffer){
@@ -93,6 +97,7 @@ float HC_Get_Range(RingbufHandle_t Echo_buffer){
     size_t echo_item_size = 0;
     float distance;
 
+    HC_Trigger_Pulse();
     rx_Item = (rmt_item32_t*)xRingbufferReceive(Echo_buffer,&echo_item_size,1000);
 
     if(rx_Item != NULL){

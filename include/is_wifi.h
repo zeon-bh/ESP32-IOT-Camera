@@ -11,4 +11,4 @@
 #define WIFI_SSID CONFIG_SSID
 #define WIFI_PASS CONFIG_PASSWORD
 
-void Init_WiFi(void);
+esp_err_t Init_WiFi(void);

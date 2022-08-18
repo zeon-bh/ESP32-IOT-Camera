@@ -5,5 +5,5 @@
 .vscode/ipch
 src/Kconfig.projbuild
 sdkconfig.esp32cam
-components
+components/esp32-camera
 sdkconfig.esp32cam.old

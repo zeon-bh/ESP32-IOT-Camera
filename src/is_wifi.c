@@ -42,26 +42,34 @@ static esp_err_t Init_NVS(void){
 }
 
 // Initialize the WiFi subsystem stack
-void Init_WiFi(){
+esp_err_t Init_WiFi(){
     esp_err_t ret = Init_NVS();
     if(ret != ESP_OK){
         ESP_LOGE(TAG,"NVS Initialization failed!!!");
         ESP_ERROR_CHECK(ret);
+        return ret;
     }
 
     // Initialize esp network interface
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    ret = esp_netif_init();
+    if (ret != ESP_OK) return ret;
+    ret = esp_event_loop_create_default();
+    if (ret != ESP_OK) return ret;
+
     esp_netif_create_default_wifi_sta();
 
     wifi_init_config_t wifi_def_init = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&wifi_def_init));
+    ret = esp_wifi_init(&wifi_def_init);
+    if (ret != ESP_OK) return ret;
 
     // Configure WiFi and add event handler
-    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT,ESP_EVENT_ANY_ID,wifi_event_handler,NULL));
-    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT,IP_EVENT_STA_GOT_IP,wifi_event_handler,NULL));
+    ret = esp_event_handler_register(WIFI_EVENT,ESP_EVENT_ANY_ID,wifi_event_handler,NULL);
+    if (ret != ESP_OK) return ret;
+    ret = esp_event_handler_register(IP_EVENT,IP_EVENT_STA_GOT_IP,wifi_event_handler,NULL);
+    if (ret != ESP_OK) return ret;
 
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA)); // Set the ESP32 as wifi station
+    ret = esp_wifi_set_mode(WIFI_MODE_STA); // Set the ESP32 as wifi station
+    if (ret != ESP_OK) return ret;
 
     wifi_config_t wifi_configuration = {
         .sta = {
@@ -69,9 +77,15 @@ void Init_WiFi(){
             .password = WIFI_PASS
         }
     };
-    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA,&wifi_configuration));
+
+    ret = esp_wifi_set_config(ESP_IF_WIFI_STA,&wifi_configuration);
+    if (ret != ESP_OK) return ret;
 
     // Start and connect the WiFi module
-    ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_ERROR_CHECK(esp_wifi_connect());
+    ret = esp_wifi_start();
+    if (ret != ESP_OK) return ret;
+    ret = esp_wifi_connect();
+    if (ret != ESP_OK) return ret;
+
+    return ESP_OK;
 }
