@@ -91,22 +91,18 @@ RingbufHandle_t HC_Echo_Init(){
 }
 
 // Read from RMT Rx Buffer and calculate the range measured by the sensor
-// Returns -1.0 if no data is read from the buffer after timeout
 float HC_Get_Range(RingbufHandle_t Echo_buffer){
-    rmt_item32_t * rx_Item;
+    rmt_item32_t * rx_Item = NULL;
     size_t echo_item_size = 0;
-    float distance;
+    float distance = 0;
 
-    HC_Trigger_Pulse();
-    rx_Item = (rmt_item32_t*)xRingbufferReceive(Echo_buffer,&echo_item_size,1000);
-
-    if(rx_Item != NULL){
-        // Get distance in centimeters
+    // Keep triggering sensor until we get a valid data
+    while(rx_Item == NULL || distance == 0){
+        HC_Trigger_Pulse();
+        rx_Item = (rmt_item32_t*)xRingbufferReceive(Echo_buffer,&echo_item_size,1500);
         distance = 34029 * ITEM_DURATION(rx_Item->duration0) / (2000000);
         vRingbufferReturnItem(Echo_buffer,(void*)rx_Item);
-        return distance;
-    }else{
-        ESP_LOGE(TAG,"Rx Ring Buffer is Empty!!!");
-        return -1.0;
     }
+    
+    return distance;
 }
