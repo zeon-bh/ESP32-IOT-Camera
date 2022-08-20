@@ -45,7 +45,7 @@ void Is_Error_report(const char* err_msg){
 
     while(1){
         ESP_LOGE(TAG,"%s",err_msg);
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }
 
@@ -57,30 +57,31 @@ int Init_Socket(){
         .sin_family = AF_INET,
         .sin_port = htons(SERVER_PORT),
     };
+    int sock = -1; int err = 1;
+    uint8_t rcount = 1;
 
     // Using TCP IPV4
-    int sock = socket(AF_INET,SOCK_STREAM,IPPROTO_IP);
-    if(sock < 0){
-        ESP_LOGE(TAG,"Failed to create socket");
-        Is_Error_report("Socket Creation Failed");
-    }
-    ESP_LOGI(TAG,"Socket created successfully, connect to IP:%s PORT:%d",server_ip,SERVER_PORT);
-
-    int err = connect(sock, (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
-    if (err != 0) {
-        ESP_LOGE(TAG, "Socket unable to connect: errno %d", errno);
-        for(uint8_t i = 1; i <= RETRY_MAX; i++){
-            ESP_LOGI(TAG,"Retrying... [Count = %d]",i);
+    while(sock < 0 || err != 0){
+        if(rcount == RETRY_MAX){
+            Is_Error_report("Couldnt Connect to Server. Check if server connection is open");
+        } else {
+            sock = socket(AF_INET,SOCK_STREAM,IPPROTO_IP);
             err = connect(sock, (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
-            if(err == 0) break; // Connection successfull
-            vTaskDelay(pdMS_TO_TICKS(2000)); // Wait 2 sec before retrying
+
+            if(sock < 0 || err != 0){
+                if(sock < 0){
+                    ESP_LOGE(TAG,"Failed to create socket, Retrying....");
+                }
+                if (err != 0){
+                    ESP_LOGE(TAG, "Socket unable to connect: errno %d, Retrying.....", errno);
+                }
+            } else break;
         }
-        if(err !=0){
-            Is_Error_report("Socket Connection Failed");
-        }
+        rcount++;
+        vTaskDelay(pdMS_TO_TICKS(2000)); // Wait 2 sec before retrying
     }
 
-    ESP_LOGI(TAG, "Successfully connected");
+    ESP_LOGI(TAG,"Socket connection created successfully, connected to IP:%s PORT:%d",server_ip,SERVER_PORT);
     return sock;
 }
 
@@ -144,7 +145,7 @@ void Task_Scan(void* args){
         taskEXIT_CRITICAL(&checkMUTEX);
 
         if(detected){
-            // signal camera task and block
+            // Signal camera task and block
             xEventGroupSetBits(IS_Event,DETECTED_BIT);
             xEventGroupWaitBits(IS_Event,COMPLETED_BIT,pdTRUE,pdFALSE,portMAX_DELAY);
             detected = false;
@@ -161,39 +162,54 @@ void Task_Scan(void* args){
 // Camera task captures bursts of 15 pictures and sends it to the server
 void Task_Camera(void* args){
     int sock = *((int*)args);
+    typedef struct {
+        uint8_t* frame_data;
+        size_t frame_len;
+    }SPRAM_Frame_Data_t;
+    SPRAM_Frame_Data_t frame_buffer[MAX_CAMERA_BURST];
 
     while (1) {
         // Wait for detect signal before taking pictures
         xEventGroupWaitBits(IS_Event,DETECTED_BIT,pdTRUE,pdFALSE,portMAX_DELAY);
 
+        // Capture Camera bursts
+        ESP_LOGI(TAG,"Capturing frames....");
         for(uint8_t count = 0; count < MAX_CAMERA_BURST; count++){
             camera_fb_t* fb = IS_Camera_Capture();
-            size_t* bf_size = &(fb->len);
-            
-            // Send buffer size
-            int err = send(sock, bf_size, sizeof(size_t), 0);
-            ESP_LOGI(TAG,"Camera Buffer Size = %d",fb->len);
-            // Send the buffer data
-            err = send(sock, fb->buf, fb->len, 0);
-
-            if (err < 0) {
-                ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
-                for(uint8_t i = 1; i <= RETRY_MAX; i++){
-                    ESP_LOGI(TAG,"Retrying... [Count = %d]",i);
-                    err = send(sock, fb->buf, fb->len, 0);
-                    if(err == 0) break; // Data Sent Successfully
-                    vTaskDelay(pdMS_TO_TICKS(1000)); // Wait 1 sec before retrying
-                }
-                if(err !=0){
-                    IS_Return_buffer(fb);
-                    Is_Error_report("Failed to send data to the server!!!");
-                } 
-            }
+            frame_buffer[count].frame_data = (uint8_t*)malloc(fb->len);
+            frame_buffer[count].frame_len = fb->len;
+            // Copy frame data from DMA buffer to external RAM
+            memcpy(frame_buffer[count].frame_data,fb->buf,fb->len);
             IS_Return_buffer(fb);
             vTaskDelay(pdMS_TO_TICKS(1000));
         }
-        
+
+        // Send the camera_fb buffer to server
+        ESP_LOGI(TAG,"Sending captured frames to server....");
+        for(uint8_t count = 0; count < MAX_CAMERA_BURST;){
+            int err = send(sock, &frame_buffer[count].frame_len, sizeof(size_t), 0);
+            ESP_LOGI(TAG,"Camera Buffer Size = %d",frame_buffer[count].frame_len);
+            // Send the buffer data
+            err = send(sock, frame_buffer[count].frame_data, frame_buffer[count].frame_len, 0);
+
+            if (err < 0) {
+                ESP_LOGE(TAG, "Error occurred during sending: errno %d, Restarting socket connection....", errno);
+                // Re-initialize socket connection to server before sending image data
+                Init_Socket();
+            } else{
+                count++;
+            }
+            vTaskDelay(pdMS_TO_TICKS(500)); // Try 100ms
+        }
+
+        // Free the allocated space in external SPIRAM
+        for(uint8_t frame = 0;frame < MAX_CAMERA_BURST;frame++){
+            free(frame_buffer[frame].frame_data);
+            frame_buffer[frame].frame_len = 0;
+        }
+
         ESP_LOGI(TAG,"Finished Camera Task.");
+        closesocket(sock);
         xEventGroupSetBits(IS_Event,COMPLETED_BIT); // Resume Scanning
     }
 }

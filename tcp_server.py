@@ -1,6 +1,7 @@
 # Test TCP Server - ESP 32 Client
 import socket
 from datetime import datetime
+import os
 
 def recv_payload(sock,data_len):
     img_data = []
@@ -20,6 +21,7 @@ def recv_payload(sock,data_len):
 
 
 rsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#rsock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
 server_address = ('192.168.0.109',3333)
 print("Starting Listen socket server....")
 rsock.bind(server_address)
@@ -31,6 +33,11 @@ while True:
 
     try:
         print("Connection from {}",client_address)
+        cTime = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+        img_folder = 'images/{}/'.format(cTime)
+
+        if not os.path.exists(img_folder):
+            os.makedirs(img_folder)
 
         for count in range(0,15):
             img_size = connection.recv(4)
@@ -38,16 +45,14 @@ while True:
             print("Size of the image buffer = ",img_size)
             esp_data = recv_payload(connection,img_size)
 
-            cTime = datetime.now()
-            img_name = 'images/{} {}.jpg'.format(cTime,count)
+            img_name = img_folder + '{}.jpg'.format(count)
             with open(img_name,'wb') as esp_img:
                 for buff in esp_data:
                     esp_img.write(buff)
 
     finally:
         print('Saved Data')
-        connection.close()
-        break
 
+""" connection.close()
 print('Exiting...')
-exit()
+exit() """

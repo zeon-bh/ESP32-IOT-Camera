@@ -8,3 +8,4 @@ src/Kconfig.projbuild
 sdkconfig.esp32cam
 components/esp32-camera
 sdkconfig.esp32cam.old
+/images
