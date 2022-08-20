@@ -27,6 +27,7 @@ static EventGroupHandle_t IS_Event;
 const uint8_t SETUP_BIT = (1<<0);
 const uint8_t DETECTED_BIT = (1<<1);
 const uint8_t COMPLETED_BIT = (1<<2);
+static SemaphoreHandle_t IS_semaphore;
 
 // HC Sensor struct
 typedef struct {
@@ -88,6 +89,7 @@ int Init_Socket(){
 // Button handler function
 void button_handler(button_event_t event,void* context){
     hc_sensor_data_t* hc_sensor = (hc_sensor_data_t*)context;
+    xSemaphoreTake(IS_semaphore,portMAX_DELAY);
     switch(event){
         case button_event_single_press:
             // Disable single press if already set
@@ -112,6 +114,7 @@ void button_handler(button_event_t event,void* context){
             ESP_LOGE(TAG,"Button handler error!!!!!");
             break;
     }
+    xSemaphoreGive(IS_semaphore);
 }
 
 // Start the Setup Process
@@ -131,18 +134,16 @@ void Task_Scan(void* args){
     xEventGroupWaitBits(IS_Event,SETUP_BIT,pdTRUE,pdFALSE,portMAX_DELAY);
     IS_LED_Set_Mode(IS_Scan);
     hc_sensor_data_t* hc_sensor = (hc_sensor_data_t*)args;
-    portMUX_TYPE checkMUTEX = portMUX_INITIALIZER_UNLOCKED;
     float distance;
     bool detected = false;
 
     while(hc_sensor->isSet){
+        xSemaphoreTake(IS_semaphore,portMAX_DELAY);
         distance = HC_Get_Range(hc_sensor->hc_bufhandler);
-    
-        taskENTER_CRITICAL(&checkMUTEX);
         if(distance > hc_sensor->range.range_max || distance < hc_sensor->range.range_min){
             detected = true;
         }
-        taskEXIT_CRITICAL(&checkMUTEX);
+        xSemaphoreGive(IS_semaphore);
 
         if(detected){
             // Signal camera task and block
@@ -172,6 +173,7 @@ void Task_Camera(void* args){
         // Wait for detect signal before taking pictures
         xEventGroupWaitBits(IS_Event,DETECTED_BIT,pdTRUE,pdFALSE,portMAX_DELAY);
 
+        xSemaphoreTake(IS_semaphore,portMAX_DELAY);
         // Capture Camera bursts
         ESP_LOGI(TAG,"Capturing frames....");
         for(uint8_t count = 0; count < MAX_CAMERA_BURST; count++){
@@ -183,7 +185,9 @@ void Task_Camera(void* args){
             IS_Return_buffer(fb);
             vTaskDelay(pdMS_TO_TICKS(1000));
         }
+        xSemaphoreGive(IS_semaphore);
 
+        xSemaphoreTake(IS_semaphore,portMAX_DELAY);
         // Send the camera_fb buffer to server
         ESP_LOGI(TAG,"Sending captured frames to server....");
         for(uint8_t count = 0; count < MAX_CAMERA_BURST;){
@@ -201,6 +205,7 @@ void Task_Camera(void* args){
             }
             vTaskDelay(pdMS_TO_TICKS(500)); // Try 100ms
         }
+        xSemaphoreGive(IS_semaphore);
 
         // Free the allocated space in external SPIRAM
         for(uint8_t frame = 0;frame < MAX_CAMERA_BURST;frame++){
@@ -235,8 +240,10 @@ void app_main() {
     RingbufHandle_t hc_buffer = HC_Echo_Init();
     if (hc_buffer == NULL) Is_Error_report("HC Sensor - Echo Init error ERROR");
 
-    // Create Event Group
+    // Create Event Group and Binary Semaphore
     IS_Event = xEventGroupCreate();
+    IS_semaphore = xSemaphoreCreateBinary();
+    xSemaphoreGive(IS_semaphore);
 
     // Allocate range data struct
     hc_sensor_data_t* hc_sensor = (hc_sensor_data_t*)malloc(sizeof(hc_sensor_data_t));
